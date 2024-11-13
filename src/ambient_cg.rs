@@ -98,7 +98,7 @@ impl Error for AmbientCGImportError {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct AmbientCGMaterial<'a> {
     pub name: &'a str,
     pub resolution: AmbientCGResolution,
