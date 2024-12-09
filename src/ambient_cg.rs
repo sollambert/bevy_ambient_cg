@@ -33,9 +33,6 @@ impl Plugin for AmbientCGPlugin {
     fn build(&self, app: &mut App) {
         *MATERIALS_PATH.lock().unwrap() = self.config.materials_path.to_owned();
         *RESOLUTION_NEGOTIATION.lock().unwrap() = self.config.resolution_negotiation;
-        println!("{:?}", self.config);
-        println!("{:?}", MATERIALS_PATH);
-        println!("{:?}", RESOLUTION_NEGOTIATION);
         app
             .insert_resource::<AmbientCGConfig>(self.config.to_owned());
     }
@@ -125,7 +122,6 @@ impl<'a> AmbientCGMaterial<'a> {
         let constructed_material_name = format!("{}_{}-JPG", self.name, self.resolution);
         let mut resource_path = materials_path.clone();
         resource_path.push(constructed_material_name);
-        println!("{:?}", resource_path);
         if !&absolute_resource_path(&resource_path).exists() {
             let resolution = match self.resolution.next_smaller() {
                 Ok(resolution) => resolution,
