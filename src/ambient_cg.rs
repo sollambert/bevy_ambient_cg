@@ -3,38 +3,52 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::str::FromStr;
+use std::sync::{LazyLock, Mutex};
 
 use bevy::asset::io::file::FileAssetReader;
-use bevy::math::Affine2;
+use bevy::math::{Affine2, VectorSpace};
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::texture::*;
 use image::{DynamicImage, GenericImageView, ImageReader, RgbImage};
 
 pub struct AmbientCGPlugin {
-    base_path: String
+    pub config: AmbientCGConfig
 }
+
+static MATERIALS_PATH: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("materials".to_string()));
+static RESOLUTION_NEGOTIATION: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(true));
 
 impl Default for AmbientCGPlugin {
     fn default() -> Self {
         Self {
-            base_path: "materials".to_string(),
+            config: AmbientCGConfig {
+                materials_path: MATERIALS_PATH.lock().unwrap().to_owned(),
+                resolution_negotiation: *RESOLUTION_NEGOTIATION.lock().unwrap()}
         }
     }
 }
 
 impl Plugin for AmbientCGPlugin {
     fn build(&self, app: &mut App) {
+        *MATERIALS_PATH.lock().unwrap() = self.config.materials_path.to_owned();
+        *RESOLUTION_NEGOTIATION.lock().unwrap() = self.config.resolution_negotiation;
+        println!("{:?}", self.config);
+        println!("{:?}", MATERIALS_PATH);
+        println!("{:?}", RESOLUTION_NEGOTIATION);
         app
-            .insert_resource::<AmbientCGPath>(AmbientCGPath(self.base_path.clone()));
+            .insert_resource::<AmbientCGConfig>(self.config.to_owned());
     }
 }
 
-#[derive(Clone, Resource)]
-pub struct AmbientCGPath(String);
+#[derive(Clone, Debug, Resource)]
+pub struct AmbientCGConfig {
+    pub materials_path: String,
+    pub resolution_negotiation: bool
+}
 
 #[allow(dead_code)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub enum AmbientCGResolution {
     #[default]
     OneK,
@@ -98,28 +112,76 @@ impl Error for AmbientCGImportError {
     }
 }
 
-#[derive(Default, Resource)]
+#[derive(Clone, Default, Resource)]
 pub struct AmbientCGMaterial<'a> {
     pub name: &'a str,
     pub resolution: AmbientCGResolution,
     pub subfolder: Option<&'a str>,
-    pub uv_scale: Option<Vec2>,
+    pub uv_scale: Option<Vec2>
 }
 
 impl<'a> AmbientCGMaterial<'a> {
+    fn negotiate_resolution(self, materials_path: &PathBuf) ->  Result<AmbientCGMaterial<'a>, AmbientCGImportError> {
+        let constructed_material_name = format!("{}_{}-JPG", self.name, self.resolution);
+        let mut resource_path = materials_path.clone();
+        resource_path.push(constructed_material_name);
+        println!("{:?}", resource_path);
+        if !&absolute_resource_path(&resource_path).exists() {
+            let resolution = match self.resolution.next_smaller() {
+                Ok(resolution) => resolution,
+                Err(error) => return Err(error)
+            };
+            return AmbientCGMaterial::negotiate_resolution(Self {
+                name: self.name,
+                resolution,
+                subfolder: self.subfolder,
+                uv_scale: self.uv_scale
+            }, materials_path)
+        }
+        let ambient_cgmaterial = self.clone();
+        Ok(ambient_cgmaterial)
+    }
     pub fn load(
         &self,
-        base_path: AmbientCGPath,
-        asset_server: Res<'_, AssetServer>,
+        asset_server: &Res<'_, AssetServer>,
+        materials: &mut ResMut<'_, Assets<StandardMaterial>>,
+    ) -> Handle<StandardMaterial> {
+        if let Some(uv_scale) = self.uv_scale {
+            return self.load_with_uv_scale(asset_server, materials, uv_scale);
+        }
+        self.load_without_uv_scale(asset_server, materials)
+    }
+    pub fn load_without_uv_scale(
+        &self,
+        asset_server: &Res<'_, AssetServer>,
         materials: &mut ResMut<'_, Assets<StandardMaterial>>
     ) -> Handle<StandardMaterial> {
-        let mut material_path = PathBuf::from_str(&base_path.0).unwrap();
+        self.load_with_uv_scale(asset_server, materials, Vec2::ZERO)
+    }
+    pub fn load_with_uv_scale(
+        &self,
+        asset_server: &Res<'_, AssetServer>,
+        materials: &mut ResMut<'_, Assets<StandardMaterial>>,
+        uv_scale: Vec2
+    ) -> Handle<StandardMaterial> {
+        let mut material_path =PathBuf::from_str(&MATERIALS_PATH.lock().unwrap()).unwrap();
 
         if let Some(subfolder) = &self.subfolder {
             material_path.push(subfolder);
         }
 
-        let constructed_material_name = format!("{}_{}-JPG", self.name, self.resolution);
+        let mut ambient_cg_material = self.clone();
+        if *RESOLUTION_NEGOTIATION.lock().unwrap() {
+            ambient_cg_material = match self.clone().negotiate_resolution(&material_path) {
+                Ok(ambient_cg_material) => {
+                    let ambient_cgmaterial = ambient_cg_material.to_owned();
+                    ambient_cgmaterial
+                },
+                Err(err) => panic!("{}", err)
+            }
+        }
+
+        let constructed_material_name = format!("{}_{}-JPG", ambient_cg_material.name, ambient_cg_material.resolution);
         material_path.push(constructed_material_name.clone());
         
         let occlusion_path = material_path.join(constructed_material_name.clone() + "_AmbientOcclusion").with_extension("jpg");
@@ -131,7 +193,7 @@ impl<'a> AmbientCGMaterial<'a> {
 
         let repeat_texture = 
         |s: &mut _| {
-            *s = ImageLoaderSettings {
+            *s = (ImageLoaderSettings {
                 sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
                     // rewriting mode to repeat image,
                     address_mode_u: ImageAddressMode::Repeat,
@@ -139,7 +201,7 @@ impl<'a> AmbientCGMaterial<'a> {
                     ..default()
                 }),
                 ..default()
-            }
+            })
         };
 
         let occlusion_texture_exists = Path::exists(&absolute_resource_path(&occlusion_path));
@@ -148,7 +210,7 @@ impl<'a> AmbientCGMaterial<'a> {
         let metallic_texture_exists = Path::exists(&absolute_resource_path(&metallic_texture_path));
         let normal_map_texture_exists = Path::exists(&absolute_resource_path(&normal_map_path));
         let roughness_texture_exists = Path::exists(&absolute_resource_path(&roughness_texture_path));
-
+        
         let occlusion_texture: Option<Handle<Image>> = if occlusion_texture_exists {Some(asset_server.load_with_settings(occlusion_path, repeat_texture))} else { None };
         let base_color_texture: Option<Handle<Image>> = if base_color_texture_exists {Some(asset_server.load_with_settings(base_color_path, repeat_texture))} else { None };
         let thickness_texture: Option<Handle<Image>> = if thickness_texture_exists {Some(asset_server.load_with_settings(thickness_path, repeat_texture))} else { None };
@@ -176,10 +238,10 @@ impl<'a> AmbientCGMaterial<'a> {
             perceptual_roughness: 1.0,
             thickness_texture,
             uv_transform: (|| {
-                if let Some(uv_scale) = self.uv_scale {
-                    return Affine2::from_scale(uv_scale);
+                if uv_scale == Vec2::ZERO {
+                    return Affine2::default();
                 }
-                Affine2::default()
+                Affine2::from_scale(uv_scale)
             })(),
             ..default()
         };

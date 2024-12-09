@@ -19,7 +19,17 @@ pub const EXAMPLE_000: AmbientCGMaterial = AmbientCGMaterial {
     subfolder: Some("some/path/to/resource"),
     resolution: AmbientCGResolution::OneK,
     // this is the uv scale you want to render at, materials are generated to repeat
+    // if uv_scale is None asset server will use default Affine value when loading
     uv_scale: Some(Vec2::new(8., 8.))
+};
+
+pub const EXAMPLE_001: AmbientCGMaterial = AmbientCGMaterial {
+    name: "Example001",
+    subfolder: Some("some/path/to/resource"),
+    // Resolution will auto negotiate to a smaller resolution if 16K is not found.
+    // This will allow you to selectively bundle textures and not have to determine resolution that is currently loaded if so desired
+    resolution: AmbientCGResolution::SixteenK,
+    uv_scale: None,
 };
 ```
 ---
@@ -37,7 +47,6 @@ Load a material and apply to mesh
 ```Rust
 fn setup(
     mut commands: Commands,
-    acg_path: Res<AmbientCGPath>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>
@@ -45,7 +54,18 @@ fn setup(
     commands.spawn((
         PbrBundle {
             mesh: meshes.add(Cylinder::new(200.0, 0.1)),
-            material: EXAMPLE_000.load(acg_path.clone(), asset_server, &mut materials),
+            material: EXAMPLE_000.load(&asset_server, &mut materials),
+            transform: Transform::from_xyz(0.0, -0.05, 0.0),
+            ..default()
+        },
+    ));
+
+    // This will override the UV Scale defined in the const
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Cylinder::new(200.0, 0.1)),
+            // Here we define UV scale on the fly to override the value from defined AmbientCGMaterial
+            material: EXAMPLE_001.load_with_uv_scale(&asset_server, &mut materials, Vec2::(2.0, 2.0)),
             transform: Transform::from_xyz(0.0, -0.05, 0.0),
             ..default()
         },
