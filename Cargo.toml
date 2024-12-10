@@ -1,7 +1,7 @@
 [package]
 name = "bevy_ambient_cg"
 description = "Bevy Plugin for importing materials from https://ambientcg.com/"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 categories = ["game-development"]
 keywords = ["bevy", "graphics", "gamedev", "material", "texture"]
