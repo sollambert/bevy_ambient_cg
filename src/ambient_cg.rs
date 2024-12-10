@@ -6,10 +6,10 @@ use std::str::FromStr;
 use std::sync::{LazyLock, Mutex};
 
 use bevy::asset::io::file::FileAssetReader;
-use bevy::math::{Affine2, VectorSpace};
+use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::render::texture::*;
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use image::{DynamicImage, GenericImageView, ImageReader, RgbImage};
 
 pub struct AmbientCGPlugin {
@@ -189,7 +189,7 @@ impl<'a> AmbientCGMaterial<'a> {
 
         let repeat_texture = 
         |s: &mut _| {
-            *s = (ImageLoaderSettings {
+            *s = ImageLoaderSettings {
                 sampler: ImageSampler::Descriptor(ImageSamplerDescriptor {
                     // rewriting mode to repeat image,
                     address_mode_u: ImageAddressMode::Repeat,
@@ -197,7 +197,7 @@ impl<'a> AmbientCGMaterial<'a> {
                     ..default()
                 }),
                 ..default()
-            })
+            }
         };
 
         let occlusion_texture_exists = Path::exists(&absolute_resource_path(&occlusion_path));
