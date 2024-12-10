@@ -1,7 +1,13 @@
 [package]
 name = "bevy_ambient_cg"
+description = "Bevy Plugin for importing materials from https://ambientcg.com/"
 version = "0.1.0"
 edition = "2021"
+categories = ["game-development"]
+keywords = ["bevy", "graphics", "gamedev", "material", "texture"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/sollambert/bevy_ambient_cg.git"
 
 [dependencies]
 bevy = { version = "0.15.0", features = ["basis-universal", "jpeg", "pbr_transmission_textures"] }
