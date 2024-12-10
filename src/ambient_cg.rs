@@ -44,7 +44,6 @@ pub struct AmbientCGConfig {
     pub resolution_negotiation: bool
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Default)]
 pub enum AmbientCGResolution {
     #[default]
@@ -56,11 +55,10 @@ pub enum AmbientCGResolution {
     SixteenK,
 }
 
-#[allow(dead_code)]
 impl AmbientCGResolution {
     pub fn next_smaller(&self) -> Result<Self, AmbientCGImportError> {
         match &self {
-            Self::OneK => Err(AmbientCGImportError(AmbientCGErrorType::NoSmallerRes)),
+            Self::OneK => Err(AmbientCGImportError(AmbientCGErrorType::NotFound)),
             Self::TwoK => Ok(Self::OneK),
             Self::FourK => Ok(Self::TwoK),
             Self::EightK => Ok(Self::FourK),
@@ -87,10 +85,8 @@ impl std::fmt::Display for AmbientCGResolution {
 #[derive(Debug)]
 pub struct AmbientCGImportError(AmbientCGErrorType);
 
-#[allow(dead_code)]
 #[derive(Debug)]
 enum AmbientCGErrorType {
-    NoSmallerRes,
     NotFound,
 }
 
@@ -103,7 +99,6 @@ impl fmt::Display for AmbientCGImportError {
 impl Error for AmbientCGImportError {
     fn description(&self) -> &str {
         match self.0 {
-            AmbientCGErrorType::NoSmallerRes => "Could not find a smaller texture size than missing requested resolution",
             AmbientCGErrorType::NotFound => "Material not found in assets folder"
         }
     }
